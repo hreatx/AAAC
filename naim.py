@@ -188,7 +188,7 @@ class Worker:
                     self.memory = deque()
 
                 if done:
-                    print('episode {} reward: {}, episode steps: {}, total steps: {}'.format(episode, total, steps, T))
+                    print('worker {}: episode {} reward: {}, episode steps: {}, total steps: {}'.format(self.name, episode, total, steps, T))
                     break
 
 
