@@ -50,8 +50,7 @@ def xavier_std(in_size, out_size):
 
 
 class A3CNet:
-    def __init__(self, name, is_master, lr, master):
-        self.lr = lr
+    def __init__(self, name, is_master, master):
         self.action = NUM_OF_ACTION
         self.name = name
         self.s = tf.placeholder(dtype=tf.float32, shape=[None, 84, 84, 4])
@@ -113,7 +112,7 @@ class Worker:
         self.memory = deque()
         self.name = name
         self.env = gym.make('bo-v0').unwrapped
-        self.net = A3CNet(name=self.name, is_master=False, lr=7e-4, master=master)
+        self.net = A3CNet(name=self.name, is_master=False, master=master)
         # print('my name is!: {}, type: {}'.format(self.name, type(self.name)))
 
     def store_transition(self, memory_bar):
@@ -200,13 +199,16 @@ class Worker:
 if __name__ == '__main__':
     SESS = tf.Session()
     with tf.device('/cpu:0'):
-        L_OP = tf.train.RMSPropOptimizer(7e-4)
-        master = A3CNet('master',True,7e-4,None)
+        global T
+        #global_step = tf.Variable(0, trainable=False)
+        learning_rate = tf.maximum(1e-10, tf.train.exponential_decay(7e-4, T, 100000, 0.95))
+        L_OP = tf.train.RMSPropOptimizer(learning_rate)
+        master = A3CNet('master',True,None)
         workers = [Worker(str(i), master) for i in range(NUM_OF_WORKERS)]
     SESS.run(tf.global_variables_initializer())
     worker_threads = []
     for w in workers:
         # job = lambda: w.work(tmax=5, gamma=0.9)
-        t = threading.Thread(target=w.work, args=(5, 0.9))
+        t = threading.Thread(target=w.work, args=(5, 0.99))
         t.start()
         worker_threads.append(t)
