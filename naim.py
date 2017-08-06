@@ -26,6 +26,13 @@ LITTLE_CONST = 1e-7
 
 ###############################constant###################################
 
+def clipped_error(x):
+    # Huber loss
+    try:
+        return tf.select(tf.abs(x) < 1.0, 0.5 * tf.square(x), tf.abs(x) - 0.5)
+    except:
+        return tf.where(tf.abs(x) < 1.0, 0.5 * tf.square(x), tf.abs(x) - 0.5)
+
 def clipped_reward(r):
     return max(-1, min(r, 1))
 
@@ -82,7 +89,7 @@ class A3CNet:
                 self.policy_loss = -tf.multiply(tf.stop_gradient(self.A), self.logprob)
                 # self.value_loss = self.A
                 self.entropy = tf.reduce_sum(tf.multiply(self.p, tf.log(self.p + 1e-10)), axis=1, keep_dims=True)
-                self.loss = tf.reduce_mean(self.policy_loss + 0.5 * tf.square(self.A) + 0.01 * self.entropy)
+                self.loss = tf.reduce_mean(self.policy_loss + clipped_error(self.A) + 0.01 * self.entropy)
                 self.gd = tf.gradients(self.loss, self.params)
                 self.apply_gd = L_OP.apply_gradients(zip(self.gd, master.params))
                 self.pull = [t.assign(e) for t, e in zip(self.params, master.params)]
