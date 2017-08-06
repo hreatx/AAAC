@@ -62,22 +62,25 @@ class A3CNet:
         self.name = name
         self.s = tf.placeholder(dtype=tf.float32, shape=[None, 84, 84, 4])
         with tf.variable_scope('{}eval'.format(name)):
-            self.w1 = self.weight(shape=[8, 8, 4, 16], dev=xavier_std(8 * 8 * 4, 8 * 8 * 16))
-            self.w2 = self.weight(shape=[4, 4, 16, 32], dev=xavier_std(4 * 4 * 16, 4 * 4 * 32))
-            self.w3 = self.weight(shape=[2592, 256], dev=xavier_std(2596, 256))
-            self.w4 = self.weight(shape=[256, 1], dev=xavier_std(256, 1))
-            self.w5 = self.weight(shape=[256, NUM_OF_ACTION], dev=xavier_std(256, NUM_OF_ACTION))
-            self.b1 = self.bias([16])
-            self.b2 = self.bias([32])
-            self.b3 = self.bias([256])
-            self.b4 = self.bias([1])
-            self.b5 = self.bias([NUM_OF_ACTION])
+            self.w1 = self.weight(shape=[8, 8, 4, 32], dev=xavier_std(8 * 8 * 4, 8 * 8 * 32))
+            self.w2 = self.weight(shape=[4, 4, 32, 64], dev=xavier_std(4 * 4 * 32, 4 * 4 * 64))
+            self.w3 = self.weight(shape=[3, 3, 64, 64], dev=xavier_std(3 * 3 * 64, 3 * 3 * 64))
+            self.w4 = self.weight(shape=[3136, 512], dev=xavier_std(3136, 512))
+            self.w5 = self.weight(shape=[512, 1], dev=xavier_std(512, 1))
+            self.w6 = self.weight(shape=[512, NUM_OF_ACTION], dev=xavier_std(512, NUM_OF_ACTION))
+            self.b1 = self.bias([32])
+            self.b2 = self.bias([64])
+            self.b3 = self.bias([64])
+            self.b4 = self.bias([512])
+            self.b5 = self.bias([1])
+            self.b6 = self.bias([NUM_OF_ACTION])
             self.conv1 = tf.nn.relu(tf.nn.conv2d(self.s, self.w1, [1, 4, 4, 1], 'VALID') + self.b1)
             self.conv2 = tf.nn.relu(tf.nn.conv2d(self.conv1, self.w2, [1, 2, 2, 1], 'VALID') + self.b2)
-            self.conv2_flat = tf.reshape(self.conv2, [-1, 2592])
-            self.fc = tf.nn.relu(tf.matmul(self.conv2_flat, self.w3) + self.b3)
-            self.v = tf.matmul(self.fc, self.w4) + self.b4  # [None, 1]
-            self.p = tf.nn.softmax(tf.matmul(self.fc, self.w5) + self.b5)  # [None, NUM_OF_ACTIONS]
+            self.conv3 = tf.nn.relu(tf.nn.conv2d(self.conv2, self.w3, [1, 1, 1, 1], 'VALID') + self.b3)
+            self.conv3_flat = tf.reshape(self.conv3, [-1, 3136])
+            self.fc = tf.nn.relu(tf.matmul(self.conv3_flat, self.w4) + self.b4)
+            self.v = tf.matmul(self.fc, self.w5) + self.b5  # [None, 1]
+            self.p = tf.nn.softmax(tf.matmul(self.fc, self.w6) + self.b6)  # [None, NUM_OF_ACTIONS]
         self.params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='{}eval'.format(name))
         if not is_master:
             with tf.variable_scope('{}grad'.format(self.name)):
