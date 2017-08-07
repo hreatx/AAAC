@@ -208,7 +208,7 @@ class Worker:
 
 if __name__ == '__main__':
     SESS = tf.Session()
-    with tf.device('/cpu:0'):
+    with tf.device('/gpu:0'):
         #global_step = tf.Variable(0, trainable=False)
         learning_rate = tf.maximum(1e-14, tf.train.exponential_decay(7e-4, T, 100000, 0.99))
         L_OP = tf.train.RMSPropOptimizer(learning_rate, epsilon=1e-1)
