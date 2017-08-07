@@ -19,7 +19,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 NUM_OF_ACTION = 4
 T = 0
 replace_freq = 40000
-TRAIN_EPISODE = 1000000
+TRAIN_EPISODE = 100000
 NUM_OF_WORKERS = 8  # multiprocessing.cpu_count()
 LITTLE_CONST = 1e-7
 
