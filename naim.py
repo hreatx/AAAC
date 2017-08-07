@@ -103,7 +103,7 @@ class A3CNet:
         return tf.Variable(initial)
 
     def bias(self, shape):
-        initial = tf.constant(1e-4, shape=shape)
+        initial = tf.constant(1e-6, shape=shape)
         return tf.Variable(initial)
 
     def get_action(self, s):
