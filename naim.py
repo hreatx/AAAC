@@ -7,9 +7,10 @@ import random
 import cv2
 import gym
 import os
+import pandas as pd
 from collections import deque
 import shutil
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 gym.envs.register(id='bo-v0', entry_point='gym.envs.atari:AtariEnv',
                   kwargs={'game': 'breakout', 'obs_type': 'image', 'frameskip': 4, 'repeat_action_probability': 0.0},
@@ -252,9 +253,11 @@ if __name__ == '__main__':
         worker_threads.append(t)
     for td in worker_threads:
         td.join()
-    ep_reward = workers[0].ep_re
-    x = np.arange(len(ep_reward))
-    plt.plot(x, ep_reward)
-    plt.xlabel('episode')
-    plt.ylabel('episode reward')
-    plt.show()
+    di = {i: workers[i].ep_re for i in range(NUM_OF_WORKERS)}
+    data = pd.DataFrame(di)
+    data.to_csv('ep_reward.csv')
+
+    # plt.plot(x, ep_reward)
+    # plt.xlabel('episode')
+    # plt.ylabel('episode reward')
+    # plt.show()
