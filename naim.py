@@ -97,11 +97,12 @@ class A3CNet:
                 # self.value_loss = self.A
                 self.entropy = tf.reduce_sum(tf.multiply(self.p, tf.log(self.p + 1e-10)), axis=1, keep_dims=True)
                 self.loss = tf.reduce_mean(self.policy_loss + clipped_error(self.A) + 0.01 * self.entropy)
-                tf.summary.scalar('loss', self.loss)
+
                 self.gd = tf.gradients(self.loss, self.params)
                 self.apply_gd = L_OP.apply_gradients(zip(self.gd, master.params))
                 self.pull = [t.assign(e) for t, e in zip(self.params, master.params)]
             if self.name == '0':
+                tf.summary.scalar('loss', self.loss)
                 self.merged = tf.summary.merge_all()
                 self.writer = tf.summary.FileWriter(LOG_DIR)
 
