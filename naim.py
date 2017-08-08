@@ -211,12 +211,12 @@ class Worker:
 if __name__ == '__main__':
     SESS = tf.Session()
 
-    with tf.device('/gpu:0'):
+    #with tf.device('/gpu:0'):
         #global_step = tf.Variable(0, trainable=False)
-        learning_rate = tf.train.exponential_decay(7e-4, T, 100000, 0.99)
-        L_OP = tf.train.RMSPropOptimizer(learning_rate, epsilon=1e-1)
-        master = A3CNet('master',True,None)
-        workers = [Worker(str(i), master) for i in range(NUM_OF_WORKERS)]
+    learning_rate = tf.train.exponential_decay(7e-4, T, 100000, 0.99)
+    L_OP = tf.train.RMSPropOptimizer(learning_rate, epsilon=1e-1)
+    master = A3CNet('master',True,None)
+    workers = [Worker(str(i), master) for i in range(NUM_OF_WORKERS)]
     SESS.run(tf.global_variables_initializer())
     saver = tf.train.Saver()
     worker_threads = []
