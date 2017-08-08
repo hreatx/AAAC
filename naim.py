@@ -8,12 +8,14 @@ import cv2
 import gym
 import os
 from collections import deque
+import shutil
+import matplotlib.pyplot as plt
 
 gym.envs.register(id='bo-v0', entry_point='gym.envs.atari:AtariEnv',
                   kwargs={'game': 'breakout', 'obs_type': 'image', 'frameskip': 4, 'repeat_action_probability': 0.0},
                   max_episode_steps=100000,
                   nondeterministic=False, )
-os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 ###############################constant###################################
 NUM_OF_ACTION = 4
@@ -22,8 +24,9 @@ replace_freq = 40000
 TRAIN_EPISODE = 100000
 NUM_OF_WORKERS = 8  # multiprocessing.cpu_count()
 LITTLE_CONST = 1e-7
-
-
+LOG_DIR = './log'
+OUT_G = False
+MAX_STEPS = 3000000
 ###############################constant###################################
 
 def clipped_error(x):
@@ -93,9 +96,13 @@ class A3CNet:
                 # self.value_loss = self.A
                 self.entropy = tf.reduce_sum(tf.multiply(self.p, tf.log(self.p + 1e-10)), axis=1, keep_dims=True)
                 self.loss = tf.reduce_mean(self.policy_loss + clipped_error(self.A) + 0.01 * self.entropy)
+                tf.summary.scalar('loss', self.loss)
                 self.gd = tf.gradients(self.loss, self.params)
                 self.apply_gd = L_OP.apply_gradients(zip(self.gd, master.params))
                 self.pull = [t.assign(e) for t, e in zip(self.params, master.params)]
+            if self.name == '0':
+                self.merged = tf.summary.merge_all()
+                self.writer = tf.summary.FileWriter(LOG_DIR)
 
 
     def weight(self, shape, dev):
@@ -118,6 +125,7 @@ class A3CNet:
 
 class Worker:
     def __init__(self, name, master):
+        self.ep_re = deque()
         self.counter = 0
         self.memory = deque()
         self.name = name
@@ -131,6 +139,8 @@ class Worker:
     def work(self, tmax, gamma):
         global T
         for episode in range(TRAIN_EPISODE):
+            if T >= MAX_STEPS:
+                break
             self.memory = deque()
             reset_counter = 5
             total = 0
@@ -143,7 +153,7 @@ class Worker:
             ob_sequence.append(preprocessed_ob)
             ob_sequence.append(preprocessed_ob)
 
-            while True:
+            while T < MAX_STEPS:
                 store_flage = True
                 # env.render()
                 pre_ob = np.stack(ob_sequence, axis=2)
@@ -188,10 +198,19 @@ class Worker:
                         action_batch_one_hot[i][index] = 1.0
                         R = reward_batch[i] + gamma * R
                         R_batch.appendleft(R)
-                    SESS.run(self.net.apply_gd, feed_dict={self.net.s: pre_ob_batch,
-                                                           self.net.Re: R_batch,
-                                                           self.net.action_one_hot: action_batch_one_hot
-                                                                        })
+                    if self.name != '0':
+                        SESS.run(self.net.apply_gd,
+                                           feed_dict={self.net.s: pre_ob_batch,
+                                                      self.net.Re: R_batch,
+                                                      self.net.action_one_hot: action_batch_one_hot
+                                                      })
+                    if self.name == '0':
+                        _, summ = SESS.run([self.net.apply_gd, self.net.merged],
+                                 feed_dict={self.net.s: pre_ob_batch,
+                                            self.net.Re: R_batch,
+                                            self.net.action_one_hot: action_batch_one_hot
+                                            })
+                        self.net.writer.add_summary(summ, T)
                     if T > 1000 and T % 500000 == 0:
                         saver.save(SESS, 'a3cmodel{}'.format(T), global_step=T)
                     SESS.run(self.net.pull)
@@ -200,6 +219,9 @@ class Worker:
 
                 if done:
                     print('worker {}: episode {} reward: {}, episode steps: {}, total steps: {}'.format(self.name, episode, total, steps, T))
+                    self.ep_re.append(total)
+                    # summary = SESS.run(self.net.merged, feed_dict=)
+                    # self.net.writer
                     break
 
 
@@ -210,7 +232,6 @@ class Worker:
 
 if __name__ == '__main__':
     SESS = tf.Session()
-
     with tf.device('/cpu:0'):
         #global_step = tf.Variable(0, trainable=False)
         learning_rate = tf.train.exponential_decay(7e-4, T, 100000, 0.99)
@@ -218,6 +239,10 @@ if __name__ == '__main__':
         master = A3CNet('master',True,None)
         workers = [Worker(str(i), master) for i in range(NUM_OF_WORKERS)]
     SESS.run(tf.global_variables_initializer())
+    if OUT_G:
+        if os.path.exists(LOG_DIR):
+            shutil.rmtree(LOG_DIR)
+        tf.summary.FileWriter(LOG_DIR, SESS.graph)
     saver = tf.train.Saver()
     worker_threads = []
     for w in workers:
@@ -227,3 +252,9 @@ if __name__ == '__main__':
         worker_threads.append(t)
     for td in worker_threads:
         td.join()
+    ep_reward = workers[0].ep_re
+    x = np.arange(len(ep_reward))
+    plt.plot(x, ep_reward)
+    plt.xlabel('episode')
+    plt.ylabel('episode reward')
+    plt.show()
