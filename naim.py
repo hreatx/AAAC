@@ -254,9 +254,12 @@ if __name__ == '__main__':
         worker_threads.append(t)
     for td in worker_threads:
         td.join()
-    di = {i: workers[i].ep_re for i in range(NUM_OF_WORKERS)}
-    data = pd.DataFrame(di)
-    data.to_csv('ep_reward.csv')
+    # di = {i: workers[i].ep_re for i in range(NUM_OF_WORKERS)}
+    # data = pd.DataFrame(di)
+    # data.to_csv('ep_reward.csv')
+    for i in range(NUM_OF_WORKERS):
+        data = np.array(workers[i].ep_re)
+        np.save('loss{}'.format(i), data)
 
     # plt.plot(x, ep_reward)
     # plt.xlabel('episode')
