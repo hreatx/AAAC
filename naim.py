@@ -16,7 +16,7 @@ gym.envs.register(id='bo-v0', entry_point='gym.envs.atari:AtariEnv',
                   kwargs={'game': 'breakout', 'obs_type': 'image', 'frameskip': 4, 'repeat_action_probability': 0.0},
                   max_episode_steps=100000,
                   nondeterministic=False, )
-os.environ['CUDA_VISIBLE_DEVICES'] = ''
+os.environ['CUDA_VISIBLE_DEVICES'] = '1,2'
 
 ###############################constant###################################
 NUM_OF_ACTION = 4
