@@ -22,7 +22,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 NUM_OF_ACTION = 4
 T = 0
 TRAIN_EPISODE = 100000
-NUM_OF_WORKERS = 4  # multiprocessing.cpu_count()
+NUM_OF_WORKERS = 6  # multiprocessing.cpu_count()
 LITTLE_CONST = 1e-7
 LOG_DIR = './log'
 OUT_G = False
@@ -100,7 +100,7 @@ class A3CNet:
                 self.gd = tf.gradients(self.loss, self.params)
                 self.apply_gd = L_OP.apply_gradients(zip(self.gd, master.params))
                 self.pull = [t.assign(e) for t, e in zip(self.params, master.params)]
-            if self.name == '0':
+            if self.name == '2':
                 self.value_loss = tf.reduce_mean(tf.square(self.A))
                 tf.summary.scalar('value_loss', self.value_loss)
                 tf.summary.scalar('policy_loss', tf.reduce_mean(self.policy_loss))
@@ -203,13 +203,13 @@ class Worker:
                         action_batch_one_hot[i][index] = 1.0
                         R = reward_batch[i] + gamma * R
                         R_batch.appendleft(R)
-                    if self.name != '0':
+                    if self.name != '2':
                         SESS.run(self.net.apply_gd,
                                            feed_dict={self.net.s: pre_ob_batch,
                                                       self.net.Re: R_batch,
                                                       self.net.action_one_hot: action_batch_one_hot
                                                       })
-                    if self.name == '0':
+                    if self.name == '2':
                         _, summ = SESS.run([self.net.apply_gd, self.net.merged],
                                  feed_dict={self.net.s: pre_ob_batch,
                                             self.net.Re: R_batch,
