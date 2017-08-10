@@ -21,13 +21,12 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 ###############################constant###################################
 NUM_OF_ACTION = 4
 T = 0
-replace_freq = 40000
 TRAIN_EPISODE = 100000
 NUM_OF_WORKERS = 4  # multiprocessing.cpu_count()
 LITTLE_CONST = 1e-7
 LOG_DIR = './log'
 OUT_G = False
-MAX_STEPS = 3000000
+MAX_STEPS = 4000000
 ###############################constant###################################
 
 def clipped_error(x):
@@ -102,7 +101,11 @@ class A3CNet:
                 self.apply_gd = L_OP.apply_gradients(zip(self.gd, master.params))
                 self.pull = [t.assign(e) for t, e in zip(self.params, master.params)]
             if self.name == '0':
-                tf.summary.scalar('loss', self.loss)
+                self.value_loss = tf.reduce_mean(tf.square(self.A))
+                tf.summary.scalar('value_loss', self.value_loss)
+                tf.summary.scalar('policy_loss', tf.reduce_mean(self.policy_loss))
+                tf.summary.scalar('entropy', tf.reduce_mean(self.entropy))
+                tf.summary.scalar('total_loss', self.loss)
                 self.merged = tf.summary.merge_all()
                 self.writer = tf.summary.FileWriter(LOG_DIR)
 
@@ -213,8 +216,8 @@ class Worker:
                                             self.net.action_one_hot: action_batch_one_hot
                                             })
                         self.net.writer.add_summary(summ, T)
-                    if T > 1000 and T % 500000 == 0:
-                        saver.save(SESS, 'a3cmodel{}'.format(T), global_step=T)
+                    if T > 1000 and T % 800000 == 0:
+                        saver.save(SESS, 'a3c', global_step=T)
                     SESS.run(self.net.pull)
 
                     self.memory = deque()
@@ -259,7 +262,7 @@ if __name__ == '__main__':
     # data.to_csv('ep_reward.csv')
     for i in range(NUM_OF_WORKERS):
         data = np.array(workers[i].ep_re)
-        np.save('loss{}'.format(i), data)
+        np.save('worker{}_episode_rewards'.format(i), data)
 
     # plt.plot(x, ep_reward)
     # plt.xlabel('episode')
