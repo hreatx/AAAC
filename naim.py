@@ -158,7 +158,7 @@ class Worker:
             ob_sequence.append(preprocessed_ob)
             ob_sequence.append(preprocessed_ob)
 
-            while T < MAX_STEPS:
+            while (not COORD.should_stop()) and T < MAX_STEPS:
                 store_flage = True
                 # env.render()
                 pre_ob = np.stack(ob_sequence, axis=2)
@@ -217,7 +217,7 @@ class Worker:
                                             })
                         self.net.writer.add_summary(summ, T)
                     if T > 1000 and T % 800000 == 0:
-                        saver.save(SESS, 'a3c', global_step=T)
+                        saver.save(SESS, 'a3cworker{}'.format(self.name), global_step=T)
                     SESS.run(self.net.pull)
 
                     self.memory = deque()
@@ -243,6 +243,7 @@ if __name__ == '__main__':
         L_OP = tf.train.RMSPropOptimizer(learning_rate, epsilon=1e-1)
         master = A3CNet('master',True,None)
         workers = [Worker(str(i), master) for i in range(NUM_OF_WORKERS)]
+    COORD = tf.train.Coordinator()
     SESS.run(tf.global_variables_initializer())
     if OUT_G:
         if os.path.exists(LOG_DIR):
@@ -255,8 +256,7 @@ if __name__ == '__main__':
         t = threading.Thread(target=w.work, args=(5, 0.99))
         t.start()
         worker_threads.append(t)
-    for td in worker_threads:
-        td.join()
+    COORD.join(worker_threads)
     # di = {i: workers[i].ep_re for i in range(NUM_OF_WORKERS)}
     # data = pd.DataFrame(di)
     # data.to_csv('ep_reward.csv')
