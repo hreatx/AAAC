@@ -10,7 +10,8 @@ import os
 import pandas as pd
 from collections import deque
 import shutil
-#import matplotlib.pyplot as plt
+
+# import matplotlib.pyplot as plt
 
 gym.envs.register(id='bo-v0', entry_point='gym.envs.atari:AtariEnv',
                   kwargs={'game': 'breakout', 'obs_type': 'image', 'frameskip': 4, 'repeat_action_probability': 0.0},
@@ -22,11 +23,13 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 NUM_OF_ACTION = 4
 T = 0
 TRAIN_EPISODE = 100000
-NUM_OF_WORKERS = 6  # multiprocessing.cpu_count()
+NUM_OF_WORKERS = 8  # multiprocessing.cpu_count()
 LITTLE_CONST = 1e-7
 LOG_DIR = './log'
 OUT_G = False
 MAX_STEPS = 4000000
+
+
 ###############################constant###################################
 
 def clipped_error(x):
@@ -35,6 +38,7 @@ def clipped_error(x):
         return tf.select(tf.abs(x) < 1.0, 0.5 * tf.square(x), tf.abs(x) - 0.5)
     except:
         return tf.where(tf.abs(x) < 1.0, 0.5 * tf.square(x), tf.abs(x) - 0.5)
+
 
 def clipped_reward(r):
     return max(-1, min(r, 1))
@@ -56,14 +60,15 @@ def xavier_std(in_size, out_size):
     return np.sqrt(2. / (in_size + out_size))
 
 
-
-
-
 class A3CNet:
     def __init__(self, name, is_master, master):
         self.action = NUM_OF_ACTION
         self.name = name
         self.s = tf.placeholder(dtype=tf.float32, shape=[None, 84, 84, 4])
+        self.policy_batch = deque()
+        self.loss_batch = deque()
+        self.a_batch = deque()
+        self.entropy_batch = deque()
         with tf.variable_scope('{}eval'.format(name)):
             self.w1 = self.weight(shape=[8, 8, 4, 32], dev=xavier_std(8 * 8 * 4, 8 * 8 * 32))
             self.w2 = self.weight(shape=[4, 4, 32, 64], dev=xavier_std(4 * 4 * 32, 4 * 4 * 64))
@@ -101,14 +106,26 @@ class A3CNet:
                 self.apply_gd = L_OP.apply_gradients(zip(self.gd, master.params))
                 self.pull = [t.assign(e) for t, e in zip(self.params, master.params)]
             if self.name == '2':
-                self.value_loss = tf.reduce_mean(tf.square(self.A))
-                tf.summary.scalar('value_loss', self.value_loss)
-                tf.summary.scalar('policy_loss', tf.reduce_mean(self.policy_loss))
-                tf.summary.scalar('entropy', tf.reduce_mean(self.entropy))
-                tf.summary.scalar('total_loss', self.loss)
+                self.r_a = tf.reduce_mean(self.A)
+                self.r_p = tf.reduce_mean(self.policy_loss)
+                self.r_e = tf.reduce_mean(self.entropy)
+                self.a_ph = tf.placeholder(dtype=tf.float32, shape=[None, 1])
+                self.e_ph = tf.placeholder(dtype=tf.float32, shape=[None, 1])
+                self.l_ph = tf.placeholder(dtype=tf.float32, shape=[None, 1])
+                self.p_ph = tf.placeholder(dtype=tf.float32, shape=[None, 1])
+                self.re_ph = tf.placeholder(dtype=tf.float32)
+                self.a_t = tf.reduce_mean(self.a_ph)
+                self.e_t = tf.reduce_mean(self.e_ph)
+                self.l_t = tf.reduce_mean(self.l_ph)
+                self.p_t = tf.reduce_mean(self.p_ph)
+                self.re_t = self.re_ph * 1.0
+                tf.summary.scalar('value_loss', self.a_t)
+                tf.summary.scalar('policy_loss', self.p_t)
+                tf.summary.scalar('entropy', self.e_t)
+                tf.summary.scalar('total_loss', self.l_t)
+                tf.summary.scalar('episode_reward', self.re_t)
                 self.merged = tf.summary.merge_all()
                 self.writer = tf.summary.FileWriter(LOG_DIR)
-
 
     def weight(self, shape, dev):
         initial = tf.truncated_normal(shape=shape, stddev=dev)
@@ -124,8 +141,6 @@ class A3CNet:
         # print(np.array(my_policy).reshape(4))
         act = np.random.choice(4, 1, p=np.array(my_policy).reshape(4))
         return act
-
-
 
 
 class Worker:
@@ -193,7 +208,7 @@ class Worker:
                         R = np.array([0.0])
                     else:
                         p_a = post_ob_batch[-1]
-                        R = SESS.run(self.net.v,feed_dict={self.net.s: p_a[np.newaxis, :]})
+                        R = SESS.run(self.net.v, feed_dict={self.net.s: p_a[np.newaxis, :]})
                         R = R.reshape(-1)
                         # print('Not done: ', R.shape)
 
@@ -205,43 +220,64 @@ class Worker:
                         R_batch.appendleft(R)
                     if self.name != '2':
                         SESS.run(self.net.apply_gd,
-                                           feed_dict={self.net.s: pre_ob_batch,
-                                                      self.net.Re: R_batch,
-                                                      self.net.action_one_hot: action_batch_one_hot
-                                                      })
-                    if self.name == '2':
-                        _, summ = SESS.run([self.net.apply_gd, self.net.merged],
                                  feed_dict={self.net.s: pre_ob_batch,
                                             self.net.Re: R_batch,
                                             self.net.action_one_hot: action_batch_one_hot
                                             })
-                        self.net.writer.add_summary(summ, T)
+                    if self.name == '2':
+                        aa, ap, ae, al, _ = SESS.run(
+                            [self.net.r_a, self.net.r_p, self.net.r_e, self.net.loss, self.net.apply_gd],
+                            feed_dict={self.net.s: pre_ob_batch,
+                                       self.net.Re: R_batch,
+                                       self.net.action_one_hot: action_batch_one_hot
+                                       })
+                        self.net.loss_batch.append(al)
+                        self.net.a_batch.append(aa)
+                        self.net.policy_batch.append(ap)
+                        self.net.entropy_batch.append(ae)
+                        # self.net.writer.add_summary(summ, T)
                     if T > 1000 and T % 800000 == 0:
-                        saver.save(SESS, 'a3cworker{}'.format(self.name), global_step=T)
+                        saver.save(SESS, 'a3cworker{}in{}'.format(self.name, T), global_step=T)
                     SESS.run(self.net.pull)
 
                     self.memory = deque()
 
                 if done:
-                    print('worker {}: episode {} reward: {}, episode steps: {}, total steps: {}'.format(self.name, episode, total, steps, T))
+                    print(
+                    'worker {}: episode {} reward: {}, episode steps: {}, total steps: {}'.format(self.name, episode,
+                                                                                                  total, steps, T))
                     self.ep_re.append(total)
-                    # summary = SESS.run(self.net.merged, feed_dict=)
-                    # self.net.writer
+
+                    if self.name == '2':
+                        # print(total)
+                        qq_1 = np.array(self.net.a_batch).reshape(len(self.net.a_batch), 1)
+                        qq_2 = np.array(self.net.entropy_batch).reshape(len(self.net.entropy_batch), 1)
+                        qq_3 = np.array(self.net.loss_batch).reshape(len(self.net.loss_batch), 1)
+                        qq_4 = np.array(self.net.policy_batch).reshape(len(self.net.policy_batch), 1)
+
+                        # print(qq.shape)
+                        summ = SESS.run(self.net.merged, feed_dict={self.net.a_ph: qq_1,
+                                                                    self.net.e_ph: qq_2,
+                                                                    self.net.l_ph: qq_3,
+                                                                    self.net.p_ph: qq_4,
+                                                                    self.net.re_ph: total})  # self.net.re_ph: total
+                        self.net.writer.add_summary(summ, episode)
+                    self.net.policy_batch = deque()
+                    self.net.loss_batch = deque()
+                    self.net.a_batch = deque()
+                    self.net.entropy_batch = deque()
+                    self.ep_re = deque()
+
                     break
-
-
-
-
-
 
 
 if __name__ == '__main__':
     SESS = tf.Session()
     with tf.device('/cpu:0'):
-        #global_step = tf.Variable(0, trainable=False)
+        # global_step = tf.Variable(0, trainable=False)
         learning_rate = tf.train.exponential_decay(7e-4, T, 100000, 0.99)
         L_OP = tf.train.RMSPropOptimizer(learning_rate, epsilon=1e-1)
-        master = A3CNet('master',True,None)
+        master = A3CNet('master', True, None)
         workers = [Worker(str(i), master) for i in range(NUM_OF_WORKERS)]
     COORD = tf.train.Coordinator()
     SESS.run(tf.global_variables_initializer())
@@ -260,9 +296,7 @@ if __name__ == '__main__':
     # di = {i: workers[i].ep_re for i in range(NUM_OF_WORKERS)}
     # data = pd.DataFrame(di)
     # data.to_csv('ep_reward.csv')
-    for i in range(NUM_OF_WORKERS):
-        data = np.array(workers[i].ep_re)
-        np.save('worker{}_episode_rewards'.format(i), data)
+
 
     # plt.plot(x, ep_reward)
     # plt.xlabel('episode')
